@@ -1,0 +1,138 @@
+---
+title: "Project BookStore - Simulation of a Data Warehouse"
+author: "Eloy Chang"
+date: "February 19, 2017"
+output: html_document
+---
+
+# Abstract 
+
+We want to simulate a datawarehouse with all the information of a bookstore, the tables to simulate are:
+
+* Inventory (ProductID,BookID,AuthorID,Price)
+
+* Books (BookID,AuthorID,Rating, Price, UnitsBought, UnitsSold)
+
+* Authors (AuthorID,MaxRating,AvgRating,PublishedBooks,UnitsBought,UnitsSold)
+
+* Purchases (TransactionID, Price, ProductID)
+
+* Sales (TransactionID, ProductID, Price, EmployeeID)
+
+* Employees (EmployerID, Transactions, GeneratedProfit)
+
+# Diagram entity - relationship.
+
+This diagram show how the tables are interconected between them
+
+![Figure 1 - diagram Entity/Relationship](C:\Users\stephanie\Desktop\Epsilon\BookStore\Part1\Figures\DER-BookStore-Part1.png)
+
+This diagram was made with the free trial of [Lucidchart](www.lucidchart.com)
+
+# Simulation of tables
+
+Now we wil to simulate the data in this tables, here we must make a important decition, the order to simulate the tables, this change how the simulations will be, 
+
+Fisrt lets create the books table.
+
+```{r}
+GenBook<- function(NBooks=100, NAuthors = 20, BasePrice = 10){
+    BookID<- 1:NBooks
+    AuthorID<- round(runif(NBooks,min = 1, max = NAuthors))
+    Rating<- round(rbeta(NBooks,shape1 = 15,shape2 = 10)*5)
+    Price<- BasePrice + rgamma(NBooks,shape = BasePrice, scale = 2)
+    Price<- Price*(Rating*rnorm(NBooks,mean = 1, sd = 0.1))
+    UnitsBought<- round(rgamma(NBooks,shape = 10, scale = 1))*Rating
+    UnitsSold<- round(runif(NBooks)*UnitsBought)
+    return(data.frame(BookID,AuthorID,Rating,Price,UnitsBought,UnitsSold))
+}
+Books<- GenBook()
+summary(Books)
+```
+
+The Author table have a direct dependence of the Books table.
+
+```{r}
+GenAuthor<- function(Books){
+    N<- max(Books$AuthorID)
+    AuthorID<- unique(Books$AuthorID)
+    MaxRating<- tapply(Books$Rating,Books$AuthorID,max)
+    AvgRating<- tapply(Books$Rating,Books$AuthorID,mean)
+    PublishedBooks<- tapply(Books$BookID,Books$AuthorID,length)
+    UnitsBought<- tapply(Books$UnitsBought,Books$AuthorID,sum)
+    UnitsSold<- tapply(Books$UnitsSold,Books$AuthorID,sum)
+    return(data.frame(AuthorID,MaxRating,AvgRating,PublishedBooks,UnitsBought,UnitsSold))
+}
+Author<- GenAuthor(Books)
+summary(Author)
+```
+
+Now we are going to simulate the inventory table, this one have a dependece of how much of each book are given by UnitsBought and UnitsSold.
+
+```{r}
+GenInventory<- function(Books){
+    CopiesByBook<- Books$UnitsBought - Books$UnitsSold
+    ProductID<- numeric();BookID<- numeric();AuthorID<- numeric();Price<- numeric()
+    PID<- 1
+    for(Book in 1:nrow(Books)){
+        if(CopiesByBook[Book]==0){
+            next
+        }
+        ProductID<- c(ProductID,PID:(PID+CopiesByBook[Book]-1))
+        BookID<- c(BookID,rep(Book,CopiesByBook[Book]))
+        AuthorID<- c(AuthorID,rep(Books$AuthorID[Book], CopiesByBook[Book]))
+        Price<- c(Price,rep(Books$Price[Book], CopiesByBook[Book]))
+        PID<- PID + CopiesByBook[Book]
+    }
+    return(data.frame(ProductID,BookID,AuthorID,Price))
+}
+Inventory<- GenInventory(Books)
+summary(Inventory)
+```
+
+Now lets create the purchase and sales tables, we have one assumption for each table:
+
+* Purchases: All the copies of a same book were bought in just one transaction.
+
+* Sales: In each transaction a random number of book were sold.
+
+```{r}
+GenPurchases<- function(Books, Inventory, NEmployee=5){
+    TID<- 1
+    PID<- Inventory$ProductID[nrow(Inventory)] + 1
+    TransactionID<- numeric()
+    ProductID<- numeric()
+    EmployeeID<- numeric()
+    Price<- numeric()
+    rows<- 1
+    for(Book in 1:nrow(Books)){
+        entries<- rows:(rows + Books$UnitsBought[Book] - 1)
+        TransactionID[entries]<- TID
+        EmployeeID[entries]<- round(runif(1,min = 1,max = NEmployee))
+        Price[entries]<- Books$Price[Book]
+        aux<- Inventory$BookID==Books$BookID[Book]
+        if(Books$UnitsSold[Book]!=0){
+            ProductID[entries] <- c(Inventory$ProductID[aux],PID:(PID + Books$UnitsSold[Book] - 1))
+        }
+        else{
+            ProductID[entries] <- Inventory$ProductID[aux]
+        }
+        rows<- rows + Books$UnitsBought[Book]
+        TID<- TID + 1
+        PID<- PID + Books$UnitsSold[Book]
+    }
+    return(data.frame(TransactionID,ProductID,EmployeeID,Price))
+}
+Purchases<- GenPurchases(Books,Inventory)
+summary(Purchases)
+```
+
+```{r}
+GenSales<- function(Books, Inventory, Purchases, ProfitRate = 0.1){
+    TID<- max(Purchases$TransactionID)
+    
+}
+```
+
+
+
