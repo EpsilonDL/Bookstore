@@ -1,7 +1,7 @@
 ---
 title: "Project BookStore - Simulation of a Data Warehouse"
 author: "Eloy Chang"
-date: "February 19, 2017"
+date: "13 de abril de 2017"
 output: html_document
 ---
 
@@ -25,7 +25,7 @@ We want to simulate a datawarehouse with all the information of a bookstore, the
 
 This diagram show how the tables are interconected between them
 
-![Figure 1 - diagram Entity/Relationship](C:\Users\stephanie\Desktop\Epsilon\BookStore\Part1\Figures\DER-BookStore-Part1.png)
+![Figure 1 - diagram Entity/Relationship](C:\Users\Eloy\Documents\Epsilon DL\Bookstore\Part1\Figures\BookStore Part1 - Page 1.png)
 
 This diagram was made with the free trial of [Lucidchart](www.lucidchart.com)
 
@@ -108,7 +108,7 @@ GenPurchases<- function(Books, Inventory, NEmployee=5){
     for(Book in 1:nrow(Books)){
         entries<- rows:(rows + Books$UnitsBought[Book] - 1)
         TransactionID[entries]<- TID
-        EmployeeID[entries]<- round(runif(1,min = 1,max = NEmployee))
+        EmployeeID[entries]<- round(runif(1,min = 0.5,max = 4.99))
         Price[entries]<- Books$Price[Book]
         aux<- Inventory$BookID==Books$BookID[Book]
         if(Books$UnitsSold[Book]!=0){
@@ -121,18 +121,78 @@ GenPurchases<- function(Books, Inventory, NEmployee=5){
         TID<- TID + 1
         PID<- PID + Books$UnitsSold[Book]
     }
-    return(data.frame(TransactionID,ProductID,EmployeeID,Price))
+    return(data.frame(ProductID,TransactionID,EmployeeID,Price))
 }
 Purchases<- GenPurchases(Books,Inventory)
 summary(Purchases)
 ```
 
 ```{r}
-GenSales<- function(Books, Inventory, Purchases, ProfitRate = 0.1){
-    TID<- max(Purchases$TransactionID)
-    # Prueba
+GenSales<- function(Books, Inventory, Purchases, ProfitRate = 1.1){
+    TID<- max(Purchases$TransactionID) + 1
+    ProductID<- numeric()
+    TransactionID<- numeric()
+    EmployeeID<- numeric()
+    Price<- numeric()
+    ProductSold<- which(Purchases$ProductID %in% Inventory$ProductID)
+    ready<- FALSE
+    while(!ready){
+        Items<- round(runif(1,min = 1,max = min(10,length(ProductSold))))
+        TransactionID<- c(TransactionID,rep(TID,Items))
+        EmployeeID<- c(EmployeeID,rep(round(runif(1,min = 0.5,max = 4.99)),Items))
+        Items<- sample(1:length(ProductSold),Items)
+        ProductID<- c(ProductID,Purchases$ProductID[ProductSold[Items]])
+        Price<- c(Price,Purchases$Price[ProductSold[Items]]*ProfitRate)
+        ProductSold<- ProductSold[-Items]
+        TID<- TID + 1
+        ready<- length(ProductSold) == 0
+    }
+    return(data.frame(ProductID,TransactionID,EmployeeID,Price))
 }
+Sales<- GenSales(Books,Inventory,Purchases)
+summary(Sales)
 ```
 
+The employees table is the last, this one is generated from the simulated information of the Purchases and Sales tables. 
 
+```{r}
+GenEmployees<- function(Purchases,Sales){
+    NEmployees<- length(unique(Purchases$EmployeeID))
+    EmployeesID<- 1:NEmployees
+    E.Sales<- numeric(length = NEmployees)
+    E.Purchases<- numeric(length = NEmployees)
+    GeneratedProfit<- numeric(length = NEmployees)
+    for(i in 1:NEmployees){
+        E.Sales[i]<- length(unique(Sales$TransactionID[Sales$EmployeeID==i]))
+        E.Purchases[i]<- length(unique(Purchases$TransactionID[Purchases$EmployeeID==i]))
+        GeneratedProfit[i]<- sum(Sales$Price[Sales$EmployeeID==i]) - sum(Purchases$Price[Purchases$EmployeeID==i])
+    }
+    return(data.frame(EmployeesID,Sales=E.Sales,Purchases=E.Purchases,GeneratedProfit))
+}
+Employees<- GenEmployees(Purchases,Sales)
+Employees
+```
+
+# Database update.
+
+Finally the tables are uploaded in a PostgreSQL database.
+
+```{r}
+WriteTables<- function(Books,Author,Inventory,Purchases,Sales,Employees){
+    require(RPostgreSQL)
+    drv <- dbDriver("PostgreSQL")
+    con <- dbConnect(drv, dbname = "epsilon_dl",host = "localhost", port = 5432, user = "Epsilon", password = "123456")
+    dbGetQuery(con, "SET search_path TO bookstore")
+    dbWriteTable(con, "Books", Books, row.names = FALSE)
+    dbWriteTable(con, "Author", Author, row.names = FALSE)
+    dbWriteTable(con, "Inventory", Inventory, row.names = FALSE)
+    dbWriteTable(con, "Purchases", Purchases, row.names = FALSE)
+    dbWriteTable(con, "Sales", Sales, row.names = FALSE)
+    dbWriteTable(con, "Employees", Employees, row.names = FALSE)
+    dbDisconnect(con)
+    dbUnloadDriver(drv)
+    return()
+}
+WriteTables(Books,Author,Inventory,Purchases,Sales,Employees)
+```
 
