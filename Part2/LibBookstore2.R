@@ -28,14 +28,13 @@
     require(RPostgreSQL)
     drv <- dbDriver("PostgreSQL")
     con <- dbConnect(drv, dbname = "epsilon_dl",host = "localhost", port = 5432, user = "Epsilon", password = "123456")
-    dbGetQuery(con, "SET search_path TO bookstore")
     # Bajar tablas
-    Books<<- dbGetQuery(con, 'select * from "Books"')
-    Authors<<- dbGetQuery(con, 'select * from "Author"')
-    Inventory<<- dbGetQuery(con, 'select * from "Inventory"')
-    Purchases<<- dbGetQuery(con, 'select * from "Purchases"')
-    Sales<<- dbGetQuery(con, 'select * from "Sales"')
-    Employees<<- dbGetQuery(con, 'select * from "Employees"')
+    Books<<- dbGetQuery(con, 'select * from bookstore."Books"')
+    Authors<<- dbGetQuery(con, 'select * from bookstore."Author"')
+    Inventory<<- dbGetQuery(con, 'select * from bookstore."Inventory"')
+    Purchases<<- dbGetQuery(con, 'select * from bookstore."Purchases"')
+    Sales<<- dbGetQuery(con, 'select * from bookstore."Sales"')
+    Employees<<- dbGetQuery(con, 'select * from bookstore."Employees"')
     dbDisconnect(con)
     dbUnloadDriver(drv)
     return()
@@ -128,10 +127,10 @@
         Price[i]<- Books$Price[BookID[i]]*Sellers[SellerID[i],
                                                   as.numeric(Condition[i])+1]
     }
-    return(data.frame(BookID,SellerID,as.character(Condition),Price))
+    return(data.frame(BookID,SellerID,Condition=as.character(Condition),Price))
 }
 
-.SimAll<- function(NSellers, NBooks, NPoll, Seed=10){
+.SimAll<- function(NSellers, NBooks, NPoll, Seed=8){
     # ---| Help: .SimAll |----
     # Esta función se encarga de realizar todas las simulaciones necesarias para
     # el desarrollo de la parte 2 del proyecto Bookstore.
@@ -151,7 +150,53 @@
     return()
 }
     
-.Analitic<- function(UsedBooks,Poll){
+.Analitic<- function(UsedBooks,Books,Poll,ProfitRate=1.1){
     # ----| help: .Analitic |----
-    # Esta es la función 
+    # Esta es la función principal de la parte 2 del proyecto, en la que se 
+    # analizaran las tablas simuladas. 
+    #
+    # Argumentos:
+    # - UsedBooks: DataFrame. Salida de la función .GenBooks2
+    # - Books: DataFrame. Salida de la función .GenBooks de la parte 1 del proyecto.
+    # - Poll: DataFrame. Salida de la función .SimulatePoll
+    # - ProfitRate: Numérico. Ganancia por venta de libros, debe de ser el mismo 
+    #   usado en la parte 1. 
+    
+    # ----| Procesamiento |----
+    
+    # Calculamos el porcentaje de reducción de precio según la aceptación por la
+    # condicion de los libros
+    Prices<- numeric(length = 3);names(Prices)<- c("Excellent","Good","Bad")
+    Prices[1]<- mean(Poll$Pregunta1)/5
+    Prices[2]<- mean(Poll$Pregunta2)/5
+    Prices[3]<- mean(Poll$Pregunta3)/5
+    if(mean(Poll$Pregunta4)<3) print(paste("La aceptación es baja = "
+                                           ,round(mean(Poll$Pregunta4)*20,2),
+                                           "%",sep = ""))
+    Profit<- data.frame(Profit=numeric(length = nrow(UsedBooks)),
+                        ProfitRate=numeric(length = nrow(UsedBooks)))
+    for(i in 1:nrow(UsedBooks)){
+        Profit$Profit[i]<- (Books$Price[Books$BookID==UsedBooks$BookID[i]]*
+            Prices[names(Prices)==UsedBooks$Condition[i]]*ProfitRate) - UsedBooks$Price[i] 
+    }
+    Profit$ProfitRate<- Profit$Profit/UsedBooks$Price
+    if(mean(Profit$Profit)<0) {
+        print("No es rentable")
+        return(Profit)
+    }
+    print(paste("Es rentable, con una gannacia promedio del ",
+                round(mean(Profit$ProfitRate)*100,2),"%", sep = ""))
+    return(Profit)
+}
+
+.WriteTables<- function(UsedBooks,Poll,Sellers){
+    require(RPostgreSQL)
+    drv <- dbDriver("PostgreSQL")
+    con <- dbConnect(drv, dbname = "epsilon_dl",host = "localhost", port = 5432, user = "Epsilon", password = "123456")
+    dbWriteTable(con, c("bookstore","UsedBooks"), Books, row.names = FALSE)
+    dbWriteTable(con, c("bookstore","Sellers"), Sellers, row.names = FALSE)
+    dbWriteTable(con, c("bookstore","Poll"), Poll, row.names = FALSE)
+    dbDisconnect(con)
+    dbUnloadDriver(drv)
+    return()
 }
