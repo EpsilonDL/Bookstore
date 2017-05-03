@@ -189,13 +189,14 @@
     return(Profit)
 }
 
-.WriteTables<- function(UsedBooks,Poll,Sellers){
+.WriteTables<- function(UsedBooks,Poll,Sellers,Profit){
     require(RPostgreSQL)
     drv <- dbDriver("PostgreSQL")
     con <- dbConnect(drv, dbname = "epsilon_dl",host = "localhost", port = 5432, user = "Epsilon", password = "123456")
     dbWriteTable(con, c("bookstore","UsedBooks"), Books, row.names = FALSE)
     dbWriteTable(con, c("bookstore","Sellers"), Sellers, row.names = FALSE)
     dbWriteTable(con, c("bookstore","Poll"), Poll, row.names = FALSE)
+    dbWriteTable(con, c("bookstore","Profit"), Profit, row.names = FALSE)
     dbDisconnect(con)
     dbUnloadDriver(drv)
     return()
