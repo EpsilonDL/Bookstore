@@ -40,37 +40,56 @@
     return()
 }
 
-.SimulatePoll<- function(N,Seed){
+.GenParametros<- function(Seed){
+    # ----| Help: .SimulatePoll |----
+    # Esta función simula los parametros poblacionales relacionados a la 
+    # aceptación de libros de segunda mano como opcion de compra. 
+    #
+    # Argumentos:
+    # Seed: Numérico. Semilla para las simulaciones. 
+    
+    # ---| Procesamiento |----
+    
+    set.seed(Seed)
+    # Generamos los parametros poblacionales
+    parametros<- data.frame(Tipo=1:4,Media=runif(4),SD=runif(4, max = 0.2),
+                            Proporcion=runif(4))
+    parametros$Proporcion<- parametros$Proporcion/sum(parametros$Proporcion)
+    parametros$Proporcion<- cumsum(parametros$Proporcion)
+    return(parametros)
+}
+
+.SimulatePoll<- function(N, parametros){
     # ----| Help: .SimulatePoll |----
     # Esta función simula, tanto los parametros poblacionales, como los resultados 
     # de una encuesta sobre la aceptación de compras de libros usados. 
     #
     # Argumentos:
     # N: Numérico. Número de encuestas a realizar.
-    # Seed: Numérico. Semilla para las simulaciones. 
+    # parametros: Dataframe. Salida de la función .GenParametros 
     
     # ---| Procesamiento |----
     
-    set.seed(Seed)
-    # Queremos generar valores dependientes entre si para los parametros.
-    medias<- runif(1)
-    desviacion<- min(medias,1-medias)/3
-    for(i in 2:4){
-        aux<- mean(medias[1:(i-1)])*rnorm(1,1,0.2)
-        aux<- min(runif(1,min = 0.9),aux)
-        aux<- max(runif(1,max = 0.1),aux)
-        medias<- c(medias,aux)
-        aux<- min(aux,1-aux)/3
-        desviacion<- c(desviacion,aux)
-    }
-    # Respondemos las N encuestas
     Poll<- data.frame(Pregunta1=numeric(length = N),Pregunta2=numeric(length = N),
                       Pregunta3=numeric(length = N),Pregunta4=numeric(length = N))
-    for(i in 1:4){
-        Poll[,i]<- rnorm(N,medias[i],desviacion[i])
+    
+    for(i in 1:N){
+        p<- which.max(parametros$Proporcion > runif(1))
+        Poll[i,]<- rnorm(4,parametros$Media[p],parametros$SD[p])
     }
-    Poll<- ceiling(Poll*5)
-    return(Poll)
+    p<- which(Poll >= 1) 
+    if(length(p)>=1){
+        for(i in p){
+            Poll[i %% N,ceiling(i/N)]<- 1 - abs(rnorm(1,0,0.1))
+        } 
+    } 
+    p<- which(Poll <= 0)
+    if(length(p)>=1){
+        for(i in p){
+            Poll[i %% N,ceiling(i/N)]<- 0 + abs(rnorm(1,0,0.1))
+        }
+    }  
+    return(ceiling(Poll*5))
 }
 
 .GenSellers<- function(N){
