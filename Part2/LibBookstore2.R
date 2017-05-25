@@ -149,7 +149,7 @@
     return(data.frame(BookID,SellerID,Condition=as.character(Condition),Price))
 }
 
-.SimAll<- function(NSellers, NBooks, NPoll, Seed=8){
+.SimAll<- function(NSellers, NBooks, NPoll, Seed=18){
     # ---| Help: .SimAll |----
     # Esta función se encarga de realizar todas las simulaciones necesarias para
     # el desarrollo de la parte 2 del proyecto Bookstore.
@@ -165,7 +165,8 @@
     .ReadTables()
     Sellers<<- .GenSellers(NSellers)
     UsedBooks<<- .GenBooks2(NBooks,Books,Sellers)
-    Poll<<- .SimulatePoll(NPoll,Seed)
+    Parametros<<- .GenParametros(Seed)
+    Poll<<- .SimulatePoll(NPoll,Parametros)
     return()
 }
     
@@ -192,20 +193,25 @@
     if(mean(Poll$Pregunta4)<3) print(paste("La aceptación es baja = "
                                            ,round(mean(Poll$Pregunta4)*20,2),
                                            "%",sep = ""))
-    Profit<- data.frame(Profit=numeric(length = nrow(UsedBooks)),
-                        ProfitRate=numeric(length = nrow(UsedBooks)))
+    # Calculo de la rentabilidad
+    Analysis<- data.frame(Profit=numeric(length = nrow(UsedBooks)),
+                        ProfitRate=numeric(length = nrow(UsedBooks)),
+                        Demand=numeric(length = nrow(UsedBooks)))
     for(i in 1:nrow(UsedBooks)){
-        Profit$Profit[i]<- (Books$Price[Books$BookID==UsedBooks$BookID[i]]*
+        Analysis$Profit[i]<- (Books$Price[Books$BookID==UsedBooks$BookID[i]]*
             Prices[names(Prices)==UsedBooks$Condition[i]]*ProfitRate) - UsedBooks$Price[i] 
+        Analysis$Demand[i]<- (Books$UnitsSold[Books$BookID==UsedBooks$BookID[i]]/
+            Books$UnitsBought[Books$BookID==UsedBooks$BookID[i]])*
+            mean(Poll[,which(names(Prices)==UsedBooks$Condition[i])]/5)
     }
-    Profit$ProfitRate<- Profit$Profit/UsedBooks$Price
-    if(mean(Profit$Profit)<0) {
+    Analysis$ProfitRate<- Analysis$Profit/UsedBooks$Price
+    if(mean(Analysis$Profit)<0) {
         print("No es rentable")
         return(Profit)
     }
     print(paste("Es rentable, con una gannacia promedio del ",
-                round(mean(Profit$ProfitRate)*100,2),"%", sep = ""))
-    return(Profit)
+                round(mean(Analysis$ProfitRate)*100,2),"%", sep = ""))
+    return(Analysis)
 }
 
 .WriteTables<- function(UsedBooks,Poll,Sellers,Profit){
