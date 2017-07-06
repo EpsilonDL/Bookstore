@@ -216,6 +216,7 @@
     dbWriteTable(con, c("bookstore","Sellers"), Sellers, row.names = FALSE)
     dbWriteTable(con, c("bookstore","Poll"), Poll, row.names = FALSE)
     dbWriteTable(con, c("bookstore","Profit"), Profit, row.names = FALSE)
+    dbWriteTable(con, c("bookstore","Parametros"), Profit, row.names = FALSE)
     dbDisconnect(con)
     dbUnloadDriver(drv)
     return()
