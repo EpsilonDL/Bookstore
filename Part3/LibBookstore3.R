@@ -41,6 +41,25 @@
     return()
 }
 
+.GenParametros<- function(Seed){
+    # ----| Help: .SimulatePoll |----
+    # Esta función simula los parametros poblacionales relacionados a la 
+    # compra de un libro en general. 
+    #
+    # Argumentos:
+    # Seed: Numérico. Semilla para las simulaciones. 
+    
+    # ---| Procesamiento |----
+    
+    set.seed(Seed)
+    # Generamos los parametros poblacionales
+    parametros<- data.frame(Tipo=1:4,Media=runif(4),SD=runif(4, max = 0.2),
+                            Proporcion=runif(4))
+    parametros$Proporcion<- parametros$Proporcion/sum(parametros$Proporcion)
+    parametros$Proporcion<- cumsum(parametros$Proporcion)
+    return(parametros)
+}
+
 .GenBooks2<- function(N, Books, Sellers){
     # ----| Help: .GenBooks2 |----
     # Esta función simula una tabla de libros de segunda mano ofrecidos a la tienda
@@ -119,6 +138,8 @@
     #     disponibles en la libreria.
     
     # ----| Procesamiento |----
+    
+    
 }
 
 .SimPurchase<- function(Operation,Inventory,Purchases,Books,Authors){
@@ -140,26 +161,45 @@
     
 }
 
-.SimClient<- function(Parametros){
+.SimClient<- function(Parametros,ParametrosCompra){
     # ----| Help: .SimClient |----
     # Esta Función simulara a un cliente que llega a la libreria 
     #
     # Argumentos:
     # - Parametros: Dataframe. Parametros caracteristico de los tipos de 
-    #    clientes que frecuentan la libreria. 
-    
+    #    clientes que frecuentan la libreria sobre los libros usados.
+    # - Parametros: Dataframe. Parametros caracteristico de los tipos de 
+    #    clientes que frecuentan la libreria sobre la compra de libros en general.
     # ----| Procesamiento |----
     
-    # Definimos el grupo al que pertenece el cliente según nuestra tabla de 
-    # parametros
-    p<- which.max(parametros$Proporcion > runif(1))
-    cliente<- rnorm(1,parametros$Media[p],parametros$SD[p])
-    
-    # Formato de Client (salida)
-    # Si compra
-    # Client<- list(Bought=TRUE,Operation=list(Books=,),Profit=)
-    # Si no compra
-    # Client<- list(Bought=FALSE)
+    BuyList<- numeric()
+    Profit<- 0
+    p<- which.max(ParametrosCompra$Proporcion > runif(1))
+    aux<- rnorm(1,ParametrosCompra$Media[p],ParametrosCompra$SD[p])
+    ready<- runif(1) > aux
+    while(!ready){
+        p<- which.max(Parametros$Proporcion > runif(1))
+        aux<- rnorm(1,Parametros$Media[p],Parametros$SD[p])
+        if(runif(1)<aux){
+            p<- ceiling(runif(1)*sum(Inventory$Condition != "New"))
+            p<- 1:nrow(Inventory)[Inventory$Condition != "New"][p]
+        }
+        else{
+            p<- ceiling(runif(1)*sum(Inventory$Condition == "New"))
+            p<- 1:nrow(Inventory)[Inventory$Condition == "New"][p]
+        }
+        BuyList<- c(BuyList,Inventory$ProductID[p])
+        Profit<- Profit + Inventory$Price[p]
+        Books$UnitsSold[Inventory$BookID[p]]<<- Books$UnitsSold[Inventory$BookID[p]] + 1
+        Authors$UnitsSold[Inventory$AuthorID[p]]<<- Authors$UnitsSold[Inventory$AuthorID[p]] + 1
+        Inventory<<- Inventory[p,]
+    }
+    aux<- length(BuyList)> 0
+    if(aux) Client<- list(Bought=TRUE,Operation=list(Books=BuyList,
+                                                     Employee=ceiling(runif(1)*5)),
+                          Profit=Profit)
+    else Client<- list(Bought=FALSE)
+    return(Client)
 }
 
 .SimBookStore<- function(Days,UsedSellersFreq=5,ProfitRate=1.1){
@@ -174,9 +214,12 @@
     # ----| Procesamiento |----
     
     .ReadTables()
-    if(!("Condition" %in% names(Inventory)))  Inventory$Condition<- "New"
-    .SimPurchase(list(Type="Used",Books=cbind(UsedBooks,Profit),
-                      Employee=ceiling(runif(1)*5)),Inventory,Purchases)
+    if(!("Condition" %in% names(Inventory))){
+        Inventory$Condition<- "New"
+        .SimPurchase(list(Type="Used",Books=cbind(UsedBooks,Profit),
+                          Employee=ceiling(runif(1)*5)),Inventory,Purchases)
+        ParametrosCompra<- .GenParametros(18)
+    }  
     Statistics<- data.frame(Clients=numeric(length = Days),
                             GoodClients=numeric(length = Days),
                             BooksSolds=numeric(length = Days),
