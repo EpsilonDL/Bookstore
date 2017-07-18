@@ -2,4 +2,4 @@ Suposiciones de simulacion:
 - La libreria esta abierta al publico por 8 horas diarias, todos los dias.
 - La llegada de clientes es modelada con una poisson cuyo parametro lambda es proximo a 60 [seg]
 - Cada 5 dias la libreria recibe ofertas de libros usados, y solo compra aquellos libros que le generen una rentabilidad mayor al 20%, adicionalmente solo compra libros usados si su stock esta por debajo de 50 libros. 
-- Diariamente la librire puede generar compras de libros nuevos si, al finalizar el dia se tienen menos de 5 tomos de al menos 3 libros diferentes o menos de 3 tomos de un mismo libro, solo compra libros cuando tiene a lo sumo 5 tomos de un libro y nunca tiene mas de 10 tomos de un mismo libro en existencia. 
+- Diariamente la libreria puede generar compras de libros nuevos si, al finalizar el dia se tienen menos de 8 tomos de al menos 3 libros diferentes o menos de 3 tomos de un mismo libro, solo compra libros cuando tiene a lo sumo 10 tomos de un libro, la cantidad de tomos que se compra de cada libro sigue la regla: LC = (10 - LI)*3

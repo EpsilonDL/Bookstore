@@ -93,7 +93,7 @@
     return(data.frame(BookID,SellerID,Condition=as.character(Condition),Price))
 }
 
-.Analitic<- function(UsedBooks,Books,Poll,ProfitRate=1.1){
+.Analitic<- function(UsedBooks,Books,Poll,ProfitRate){
     # ----| help: .Analitic |----
     # Esta es la función se encargara de evaluar las ganancias que generan los
     # libros usados disonibles para la compra. 
@@ -123,7 +123,7 @@
     return(Profit)
 }
 
-.SimSale<- function(Operation,Inventory,Sales,Books,Authors){
+.SimSale<- function(Operation,Inventory,Sales,Books,Authors,TID,ProfitRate){
     # ----| Help: .UpdateSale |----
     # Esta Función simula las ventas realizadas por la libreria
     #
@@ -139,10 +139,21 @@
     
     # ----| Procesamiento |----
     
-    
+    TID<<- TID + 1
+    p<- which(Books$BookID %in% Operation$Books)
+    Books$UnitsSold[p]<<- Books$UnitsSold[p] + 1
+    Authors$UnitsSold[Authors$AuthorID %in% Books$AuthorID[p]]<<- 
+        Authors$UnitsSold[Authors$AuthorID %in% Books$AuthorID[p]] + 1
+    p<- which(Inventory$ProductID %in% Operation$Books)
+    Sales<<- rbind(Sales,data.frame(ProductID=Operation$Books,
+                                    TransactionID=rep(TID,length(p)),
+                                    EmployeeID=rep(Operation$Employee,length(p)),
+                                    Price=Inventory$Price[p]*ProfitRate))
+    Inventory<<- Inventory[-which(p),]
+    return(TRUE)
 }
 
-.SimPurchase<- function(Operation,Inventory,Purchases,Books,Authors){
+.SimPurchase<- function(Operation,Inventory,Purchases,Books,Authors,TID,PID){
     # ----| Help: .SimPurchase |----
     # Esta Función simulara la compra de libros por parte de la libreria.
     #
@@ -158,7 +169,34 @@
     
     # ----| Procesamiento |----
     
-    
+    if(Operation$Type == "New"){
+        auxbooks<- tapply(Inventory$BookID,Inventory$BookID,length)
+        if((sum(auxbooks < 8) >= 3) | (sum(auxbooks < 3) > 0)){
+            TID<<- TID + 1;PID<- PID + 1
+            auxbooks<- (10 - auxbooks[auxbooks < 10])*3
+            auxbooks<- auxbooks[order(names(auxbooks))]
+            for(i in 1:length(auxbooks)){
+                BookID<- names(auxbooks)[i]
+                AuthorID=Books$AuthorID[Books$BookID == BookID]
+                Books$UnitsBought[Books$BookID == BookID]<<- Books$UnitsBought[Books$BookID == BookID] + auxbooks[i]
+                Authors$UnitsBought[Authors$AuthorID == AuthorID]<<- Authors$UnitsBought[Authors$AuthorID == AuthorID] + auxbooks[i]
+                Inventory<<- rbind(Inventory,
+                                  data.frame(ProductID=PID:(PID + auxbooks[i] - 1),
+                                             BookID=rep(BookID,auxbooks[i]),
+                                             AuthorID=rep(AuthorID,auxbooks[i]),
+                                             Price=rep(Books$Price[Books$BookID == BookID],auxbooks[i])))
+                Purchases<<- rbind(Purchases,
+                                  data.frame(ProducID=PID:(PID + auxbooks[i] - 1),
+                                             TransactionID=rep(TID,auxbooks[i]),
+                                             EmployeeID=rep(Operation$Employee,auxbooks[i]),
+                                             Price=rep(Books$Price[Books$BookID == BookID],auxbooks[i])))
+                PID<<- PID + auxbooks[i]
+            }
+        }
+    }
+    else{
+        TID<<- TID + 1;PID<- PID + 1
+    }
 }
 
 .SimClient<- function(Parametros,ParametrosCompra){
@@ -226,6 +264,8 @@
                             BooksPurchases=numeric(length = Days),
                             Profit=numeric(length = Days),
                             NetProfit=numeric(length = Days))
+    TID<- max(c(Sales$TransactionID,Purchases$TransactionID))
+    PID<- max(Inventory$ProductID)
     for(day in 1:Days){
         Clients<-GoodClients<-BooksSolds<-BooksPurchases<-Profit<-time<- 0
         ready<- FALSE
@@ -235,7 +275,7 @@
             Client<- .SimClient(Parametros)
             Clients<- Clients + 1
             if(Client$Bought){
-                .SimSale(Client$Operation,Inventory,Sales,Books,Authors)
+                .SimSale(Client$Operation,Inventory,Sales,Books,Authors,TIDProfitRate)
                 GoodClients<- GoodClients + 1
                 BooksSolds<- BooksSolds + length(Clients$Operation$Books)
                 Profit<- Profit + Client$Profit
@@ -243,16 +283,19 @@
             aux<- rpois(1,rnorm(1,60,10))
             ready<- time + aux > 28800
         }
-        NetProfit<- 0
-        if(day%%UsedSellersFreq == 0 & sum(Inventory$Condition != "New") < 50){
+        NetProfit<- Profit;aux<- 0
+        if(day %% UsedSellersFreq == 0 & sum(Inventory$Condition != "New") < 50){
             UsedBooks<- .GenBooks2(round(runif(1)*100), Books, Sellers)
             Profit<- .Analitic(UsedBooks,Books,Poll,ProfitRate)
             aux<- .SimPurchase(list(Type="Used",Books=cbind(UsedBooks,Profit),
-                              Employee=ceiling(runif(1)*5)),Inventory,Purchases)
+                              Employee=ceiling(runif(1)*5)),Inventory,Purchases,
+                              Books,Authors,TID,PID)
         }
-        NetProfit<- aux + .SimPurchase(list(Type="New",Employee=ceiling(runif(1)*5)),
-                                Inventory,Purchases)
+        NetProfit<- NetProfit - aux - 
+            .SimPurchase(list(Type="New",Employee=ceiling(runif(1)*5)),
+                                Inventory,Purchases,Books,Authors,TID,PID)
         Statistics[day,]<- c(Clients,GoodClients,BooksSolds,BooksPurchases,
                              Profit,NetProfit)
     }
+    return(Statistics)
 }
