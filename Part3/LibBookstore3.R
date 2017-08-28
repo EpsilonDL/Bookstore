@@ -122,7 +122,7 @@
     return(Profit)
 }
 
-.SimPurchase<- function(Operation,Inventory,Purchases,Books,Authors,TID,PID){
+.SimPurchase<- function(Operation,Inventory,Purchases,Books,Authors,TID,PID,ProfitRate){
     # ----| Help: .SimPurchase |----
     # Esta Función simulara la compra de libros por parte de la libreria.
     #
@@ -155,13 +155,13 @@
                                   data.frame(ProductID=PID:(PID + auxbooks[i] - 1),
                                              BookID=rep(BookID,auxbooks[i]),
                                              AuthorID=rep(AuthorID,auxbooks[i]),
-                                             Price=rep(Books$Price[Books$BookID == BookID],auxbooks[i]),
+                                             Price=rep(Books$Price[Books$BookID == BookID]*ProfitRate,auxbooks[i]),
                                              Condition=rep("New",auxbooks[i])))
                 Purchases<- rbind(Purchases,
                                   data.frame(ProductID=PID:(PID + auxbooks[i] - 1),
                                              TransactionID=rep(TID,auxbooks[i]),
                                              EmployeeID=rep(Operation$Employee,auxbooks[i]),
-                                             Price=rep(Books$Price[Books$BookID == BookID],auxbooks[i])))
+                                             Price=rep(Books$Price[Books$BookID == BookID]*ProfitRate,auxbooks[i])))
                 PID<- PID + auxbooks[i]
             }
             BooksPurchased<- sum(auxbooks)
@@ -169,6 +169,8 @@
     }
     else{
         Operation$Books<- Operation$Books[Operation$Books$ProfitRate > 0.2,]
+        if(nrow(Operation$Books) == 0) return(list(spent=spent,BooksPurchased=BooksPurchased,Inventory=Inventory,
+                                                   Purchases=Purchases,Books=Books,Authors=Authors,TID=TID,PID=PID))
         auxbooks<- table(Inventory$BookID)
         if((sum(auxbooks < 8) >= 3) | (sum(auxbooks < 3) > 0)){
             TID<- TID + 1;PID<- PID + 1
@@ -220,7 +222,7 @@
     # ----| Procesamiento |----
     
     BuyList<- numeric()
-    Profit<- 0
+    Profit<- NetProfit<- 0
     q<- which.max(ParametrosCompra$Proporcion > runif(1))
     aux<- rnorm(1,ParametrosCompra$Media[q],ParametrosCompra$SD[q])
     EmployeeID<- ceiling(runif(1)*5)
@@ -229,20 +231,26 @@
         p<- sample(which(Inventory$Condition == "New"),min(sample(5,1),
                                                            sum(Inventory$Condition == "New")))
         BuyList<- c(BuyList,Inventory$ProductID[p])
-        Profit<- Profit + sum(Inventory$Price[p])
+        Profit<- sum(Inventory$Price[p])
         Books$UnitsSold[Books$BookID %in% Inventory$BookID[p]]<- Books$UnitsSold[Books$BookID %in% Inventory$BookID[p]] + 1
         Authors$UnitsSold[Authors$AuthorID %in% Inventory$AuthorID[p]]<- Authors$UnitsSold[Authors$AuthorID %in% Inventory$AuthorID[p]] + 1
+        NetProfit<- Profit - Profit/ProfitRate
     } 
     q<- which.max(Parametros$Proporcion > runif(1))
     aux<- rnorm(1,Parametros$Media[q],Parametros$SD[q])
+    UsedBooksSold<- UsedBooksNetProfit<- 0
     if(runif(1) < aux){
         q<- sample(which(Inventory$Condition != "New"),min(sample(5,1),
                                                            sum(Inventory$Condition != "New")))
         BuyList<- c(BuyList,Inventory$ProductID[q])
-        Profit<- Profit + sum(Inventory$Price[q])
+        tmp<- sum(Inventory$Price[q])
+        Profit<- Profit + tmp
         Books$UnitsSold[Books$BookID %in% Inventory$BookID[q]]<- Books$UnitsSold[Books$BookID %in% Inventory$BookID[q]] + 1
         Authors$UnitsSold[Authors$AuthorID %in% Inventory$AuthorID[q]]<- Authors$UnitsSold[Authors$AuthorID %in% Inventory$AuthorID[q]] + 1
         p<- c(p,q)
+        UsedBooksSold<- length(q)
+        UsedBooksNetProfit<- tmp
+        NetProfit<- NetProfit + (tmp - tmp/ProfitRate)
     }
     if(length(p) > 0){
         TID<- TID + 1
@@ -261,7 +269,8 @@
         Client<- list(Bought=TRUE,Operation=list(Books=BuyList,
                                                  Employee=EmployeeID),
                       Profit=Profit, Inventory=Inventory,Sales=Sales,Books=Books,
-                      Authors=Authors,Employees=Employees,TID=TID)
+                      Authors=Authors,Employees=Employees,TID=TID,NetProfit=NetProfit,
+                      UsedBooksSold=UsedBooksSold,UsedBooksNetProfit=UsedBooksNetProfit)
     } 
     else Client<- list(Bought=FALSE)
     return(Client)
@@ -300,9 +309,11 @@
     Statistics<- data.frame(Clients=numeric(length = Days),
                             GoodClients=numeric(length = Days),
                             BooksSolds=numeric(length = Days),
+                            UsedBooksSold=numeric(length = Days),
                             BooksPurchased=numeric(length = Days),
                             Profit=numeric(length = Days),
-                            NetProfit=numeric(length = Days))
+                            NetProfit=numeric(length = Days),
+                            UsedBooksNetProfit=numeric(length = Days))
     if(is.null(seed)){
         seed<- Sys.time()
         save(seed,file = "seed.RData")
@@ -317,7 +328,8 @@
     else wday<- 7
     for(day in 1:Days){
         lambda<- c(rep(60,4),50,40,70)
-        Clients<-GoodClients<-BooksSolds<-BooksPurchased<-Profit<-time<- 0
+        Clients<-GoodClients<-BooksSolds<-UsedBooksSold<-BooksPurchased<-Profit<-0
+        NetProfit<- UsedBooksNetProfit<-time<- 0
         ready<- FALSE
         aux<- rpois(1,rnorm(1,lambda[wday],10))
         while(!ready){
@@ -328,35 +340,36 @@
             if(Client$Bought){
                 GoodClients<- GoodClients + 1
                 BooksSolds<- BooksSolds + length(Client$Operation$Books)
+                UsedBooksSold<- UsedBooksSold + Client$UsedBooksSold
+                UsedBooksNetProfit<- UsedBooksNetProfit + Client$UsedBooksNetProfit
                 Profit<- Profit + Client$Profit
+                NetProfit<- NetProfit + Client$NetProfit
                 Inventory<- Client$Inventory;Sales<- Client$Sales;Books<- Client$Books
                 Authors<- Client$Authors;Employees<- Client$Employees;TID<- Client$TID
             }
             aux<- rpois(1,rnorm(1,60,10))
             ready<- time + aux > 28800
         }
-        NetProfit<- Profit;aux<- 0
         if(day %% UsedSellersFreq == 0 & sum(Inventory$Condition != "New") < 50){
-            UsedBooks<- .GenBooks2(round(runif(1)*100), Books, Sellers)
-            Profit<- .Analitic(UsedBooks,Books,Poll,ProfitRate)
-            tmp<- .SimPurchase(list(Type="Used",Books=cbind(UsedBooks,Profit),
+            UsedBooks<- .GenBooks2(ceiling(runif(1)*100), Books, Sellers)
+            Profit2<- .Analitic(UsedBooks,Books,Poll,ProfitRate)
+            tmp<- .SimPurchase(list(Type="Used",Books=cbind(UsedBooks,Profit2),
                               Employee=ceiling(runif(1)*5)),Inventory,Purchases,
-                              Books,Authors,TID,PID)
-            aux<- tmp$spent;BooksPurchased<- tmp$BooksPurchased
+                              Books,Authors,TID,PID,ProfitRate)
+            UsedBooksNetProfit<- UsedBooksNetProfit - tmp$spent
+            BooksPurchased<- tmp$BooksPurchased
             Inventory<- tmp$Inventory;Purchases<- tmp$Purchases;Books<- tmp$Books
             Authors<- tmp$Authors;TID<- tmp$TID;PID<- tmp$PID
         }
-        NetProfit<- NetProfit - aux 
         tmp<- .SimPurchase(list(Type="New",Employee=ceiling(runif(1)*5)),
-                                Inventory,Purchases,Books,Authors,TID,PID)
+                                Inventory,Purchases,Books,Authors,TID,PID,ProfitRate)
         Inventory<- tmp$Inventory;Purchases<- tmp$Purchases;Books<- tmp$Books
         Authors<- tmp$Authors;TID<- tmp$TID;PID<- tmp$PID
-        aux<- tmp$spent
         BooksPurchased<- BooksPurchased + tmp$BooksPurchased
-        NetProfit<- NetProfit - aux
-        Statistics[day,]<- c(Clients,GoodClients,BooksSolds,BooksPurchased,
-                             Profit,NetProfit)
+        Statistics[day,]<- c(Clients,GoodClients,BooksSolds,UsedBooksSold,BooksPurchased,
+                             Profit,NetProfit,UsedBooksNetProfit)
         wday<- ((wday+1) %% 7) + 1
+        print(paste("Total Libros =",nrow(Inventory)))
     }
     save(Authors,Books,Employees,Inventory,Parametros,ParametrosCompra,Poll,
          Purchases,Sales,Sellers,UsedBooks, file = "BookstoreSimulatedTables.RData")
