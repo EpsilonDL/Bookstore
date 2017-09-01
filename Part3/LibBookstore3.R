@@ -118,7 +118,8 @@
     for(i in 1:nrow(UsedBooks)){
         Profit$Profit[i]<- (Books$Price[Books$BookID==UsedBooks$BookID[i]]*
                                 Prices[names(Prices)==UsedBooks$Condition[i]]*ProfitRate) - UsedBooks$Price[i] 
-        Profit$SellPrice[i]<- Prices[names(Prices)==UsedBooks$Condition[i]]*ProfitRate
+        Profit$SellPrice[i]<- Books$Price[Books$BookID==UsedBooks$BookID[i]]*
+            Prices[names(Prices)==UsedBooks$Condition[i]]*ProfitRate
     }
     Profit$ProfitRate<- Profit$Profit/UsedBooks$Price
     return(Profit)
@@ -240,7 +241,7 @@
         Profit<- NewBooksProfit<- sum(Inventory$SellPrice[p])
         Books$UnitsSold[Books$BookID %in% Inventory$BookID[p]]<- Books$UnitsSold[Books$BookID %in% Inventory$BookID[p]] + 1
         Authors$UnitsSold[Authors$AuthorID %in% Inventory$AuthorID[p]]<- Authors$UnitsSold[Authors$AuthorID %in% Inventory$AuthorID[p]] + 1
-        NetProfit<- NewBooksNetProfit<- Profit - Sum(Inventory$Price[p])
+        NetProfit<- NewBooksNetProfit<- Profit - sum(Inventory$Price[p])
     } 
     q<- which.max(Parametros$Proporcion > runif(1))
     aux<- rnorm(1,Parametros$Media[q],Parametros$SD[q])
@@ -304,6 +305,7 @@
     Authors$PublishedBooks<- as.numeric(Authors$PublishedBooks)
     Authors$UnitsBought<- as.numeric(Authors$UnitsBought)
     Authors$UnitsSold<- as.numeric(Authors$UnitsSold)
+    Profit<- .Analitic(UsedBooks,Books,Poll,ProfitRate)
     TID<- max(c(Sales$TransactionID,Purchases$TransactionID))
     PID<- max(Inventory$ProductID)
     if(!("Condition" %in% names(Inventory))){
